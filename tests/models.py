@@ -76,11 +76,12 @@ class Cart:
 
     def get_total_price(self) -> float:
         total_price = 0
-        for product, quantity in self.products.items():
-            if not len(self.products.items()):
-                break
-            total_price += product.price * quantity
-        return total_price
+        if not len(self.products):
+            pass
+        else:
+            for product, quantity in self.products.items():
+                total_price += product.price * quantity
+        return round(total_price, 2)
 
 
     def buy(self):

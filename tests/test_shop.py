@@ -118,7 +118,7 @@ class TestCart:
 
     def test_get_total_price__not_empty_cart(self, generate_carts):
         for cart in generate_carts:
-            expected_result = sum(product.price * cart.products[product] for product in cart.products)
+            expected_result = round(sum(product.price * cart.products[product] for product in cart.products), 2)
             assert cart.get_total_price() == expected_result
 
     def test_get_total_price__empty_cart(self, empty_cart):
