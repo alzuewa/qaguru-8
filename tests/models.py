@@ -1,6 +1,4 @@
 
-MAX_POSSIBLE_PRODUCT_QUANTITY = 10000
-
 class Product:
     """
     Класс продукта
@@ -21,10 +19,9 @@ class Product:
             raise ValueError('Requested quantity cannot be less then 1 or float value')
         return self.quantity >= quantity
 
-    def buy(self, quantity) -> str | Exception:
+    def buy(self, quantity) -> None:
         if self.check_quantity(quantity):
             self.quantity -= quantity
-            return 'Success'
         else:
             raise ValueError
 
@@ -56,14 +53,16 @@ class Cart:
 
     def remove_product(self, product: Product, remove_count=None):
         if product not in self.products:
-            raise ValueError('No such product in cart')
+            raise KeyError('No such product in cart')
         elif remove_count is None:  # do this check before next `elif`, otherwise cannot compare None to int (<= 0)
             self.products.pop(product)
+            return
         elif remove_count <= 0 or isinstance(remove_count, float):
             raise ValueError('Can only take integer >= 1')
         elif (remove_count > self.products[product] or
               self.products[product] == remove_count):
             self.products.pop(product)
+            return
         else:
             self.products[product] -= remove_count
         return self.products[product]
@@ -85,9 +84,16 @@ class Cart:
 
 
     def buy(self):
-        for product in self.products:
-            try:
+        is_purchase_possible = all(product.check_quantity(self.products[product]) for product in self.products)
+        if is_purchase_possible:
+            for product in self.products:
                 product.buy(self.products[product])
-            except ValueError:
-                raise
-        return 'Success'
+            self.products.clear()
+        else:
+            not_enough_products = []
+            for product in self.products:
+                check_result = product.check_quantity(self.products[product])
+                if check_result is False:
+                    not_enough_products.append(product.name)
+            output_str = ', '.join(not_enough_products)
+            return f'Not enough products: {output_str}'
