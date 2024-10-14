@@ -1,12 +1,10 @@
 """
 Протестируйте классы из модуля homework/models.py
 """
-import random
 
 import pytest
 
-from tests.conftest import cart_without_book_product
-from tests.models import MAX_POSSIBLE_PRODUCT_QUANTITY
+from tests.models import Product
 
 
 class TestProducts:
@@ -15,111 +13,119 @@ class TestProducts:
     Например, текущий класс группирует тесты на класс Product
     """
 
+    @pytest.mark.parametrize('test_value', [1, 500, 999, 1000])
+    def test_product_check_quantity__available_count(self, book_product, test_value):
+        assert book_product.check_quantity(quantity=test_value) is True
+
     @pytest.mark.parametrize(
-        'test_value, expected_result',
-        [(1, True), (500, True), (999, True), (1000, True), (1001, False)]
-    )
-    def test_product_check_quantity__positive(self, book_product, test_value, expected_result):
-        assert book_product.check_quantity(test_value) is expected_result
+        'test_value', [1001, 20000])
+    def test_product_check_quantity__unavailable_count(self, book_product, test_value):
+        assert book_product.check_quantity(quantity=test_value) is False
 
     @pytest.mark.parametrize('test_value', [0, -1, 1.7])
-    def test_product_check_quantity__negative(self, book_product, test_value):
+    def test_product_check_quantity__unexpected_value(self, book_product, test_value):
         with pytest.raises(ValueError):
-            book_product.check_quantity(test_value)
+            book_product.check_quantity(quantity=test_value)
 
-    def test_product_buy(self, book_product):
-        initial_product_count = book_product.quantity
-        requested_items_count = random.randint(1, book_product.quantity)
-        assert book_product.buy(requested_items_count) == 'Success'
-        assert book_product.quantity == initial_product_count - requested_items_count
+    def test_product_buy_available(self, book_product):
+        book_product.buy(quantity=200)
+        assert book_product.quantity == 800
 
     def test_product_buy_more_than_available(self, book_product):
-        requested_items_count = random.randint(1001, MAX_POSSIBLE_PRODUCT_QUANTITY)
         with pytest.raises(ValueError):
-            book_product.buy(requested_items_count)
+            book_product.buy(quantity=1001)
+
+    @pytest.mark.parametrize('test_value', [0, -15, 6.0])
+    def test_product_buy_unexpected_value(self, book_product, test_value):
+        with pytest.raises(ValueError):
+            book_product.buy(quantity=test_value)
 
 
 
 class TestCart:
-#=================
-# tests for adding
 
-    def test_add_product__explicitly_add_1_item(self, book_product, random_cart):
-        initial_product_count = random_cart.products.get(book_product, 0)
-        assert random_cart.add_product(book_product, 1) == initial_product_count + 1
+    # tests for adding to empty cart
 
-    def test_add_product__implicitly_add_1_item(self, book_product, random_cart):
-        initial_product_count = random_cart.products.get(book_product, 0)
-        assert random_cart.add_product(book_product) == initial_product_count + 1
+    def test_add_product__explicitly_add_to_empty_cart(self, book_product, empty_cart):
+        assert empty_cart.add_product(product=book_product, buy_count=10000) == 10000
 
-    def test_add_product_add__acceptable_amount(self, book_product, random_cart):
-        initial_product_count = random_cart.products.get(book_product, 0)
-        quantity = random.randint(2, MAX_POSSIBLE_PRODUCT_QUANTITY)
-        assert random_cart.add_product(book_product, quantity) == initial_product_count + quantity
+    def test_add_product__implicitly_add_to_empty_cart(self, book_product, empty_cart):
+        assert empty_cart.add_product(product=book_product) == 1
 
-    @pytest.mark.parametrize('quantity', [-1, 0, 1.5])
-    def test_add_product__unacceptable_amount(self, book_product, random_cart, quantity):
+    # ===================================
+    # tests for adding to non-empty cart
+
+    def test_add_product__product_exists_in_cart(self, cart_with_one_product):
+        '''
+        This test will not pass if we create here absolutely the same test_product that already exists in fixture cart, i.e.:
+        test_product = Product("book", 20, "A simple book", 300) --> create the same test_product
+        cart_with_test_product.add_product(test_product, buy_count=50) --> add 50 items of test_product to cart
+
+        This test_product will not be added to existing one in cart, because they have different identities.
+        The new cart will contain 2 products which are both 'books':
+        like {Product(book): 20, Product(book): 50}
+        So, in case if we need it - TODO: write proper overriding of __hash__() and add __eq__() overriding for Product()
+        '''
+        test_product = list(cart_with_one_product.products.keys())[0]
+        assert cart_with_one_product.add_product(product=test_product, buy_count=50) == 70
+        assert len(cart_with_one_product.products) == 1
+
+    def test_add_product__product_not_in_cart(self, cart_with_one_product):
+        test_product = Product('pen', 800, 'Just a pen', 30)
+        assert cart_with_one_product.add_product(product=test_product, buy_count=6) == 6
+        assert len(cart_with_one_product.products) == 2
+
+    # ===============================================
+    # tests for removing from cart with test product
+
+    @pytest.mark.parametrize('remove_count, expected_after_remove', [(1, 19), (5, 15)])
+    def test_remove_some_product(self, cart_with_one_product, remove_count, expected_after_remove):
+        test_product = list(cart_with_one_product.products.keys())[0]
+        assert cart_with_one_product.remove_product(product=test_product,
+                                                    remove_count=remove_count) == expected_after_remove
+
+    def test_remove_product__all_explicitly(self, cart_with_one_product):
+        test_product = list(cart_with_one_product.products.keys())[0]
+        initial_test_product_count = cart_with_one_product.products[test_product]
+        cart_with_one_product.remove_product(product=test_product, remove_count=initial_test_product_count)
+        assert cart_with_one_product.products == {}
+
+    def test_remove_product__all_implicitly(self, cart_with_one_product):
+        test_product = list(cart_with_one_product.products.keys())[0]
+        cart_with_one_product.remove_product(product=test_product)
+        assert cart_with_one_product.products == {}
+
+    def test_remove_product__more_than_exist_in_cart(self, cart_with_one_product):
+        test_product = list(cart_with_one_product.products.keys())[0]
+        cart_with_one_product.remove_product(product=test_product, remove_count=21)
+        assert cart_with_one_product.products == {}
+
+    @pytest.mark.parametrize('quantity', [0, -1, 16.9])
+    def test_remove_product__unexpected_value(self, cart_with_one_product, quantity):
+        test_product = list(cart_with_one_product.products.keys())[0]
         with pytest.raises(ValueError):
-            random_cart.add_product(book_product, quantity)
+            cart_with_one_product.remove_product(test_product, quantity)
 
-#=========================================
-# tests for removing from cart with product
+    # =================================================
+    # tests for removing from cart without test product
 
-    def test_remove_product__1(self, book_product, cart_with_book_product):
-        initial_product_count = cart_with_book_product.products[book_product]
-        assert cart_with_book_product.remove_product(book_product, 1) == initial_product_count - 1
-
-    def test_remove_product__not_all(self, book_product, cart_with_book_product):
-        initial_product_count = cart_with_book_product.products[book_product]
-        remove_product_count = random.randint(2, initial_product_count-1)
-        assert cart_with_book_product.remove_product(book_product, remove_product_count) == initial_product_count - remove_product_count
-
-    def test_remove_product__all_implicitly(self, book_product, cart_with_book_product):
+    def test_remove_product__product_not_in_cart__pass_amount(self, cart_with_one_product):
+        test_product = Product('pen', 800, 'Just a pen', 30)
         with pytest.raises(KeyError):
-            cart_with_book_product.remove_product(book_product)
-
-    def test_remove_product__all_explicitly(self, book_product, cart_with_book_product):
-        initial_product_count = cart_with_book_product.products[book_product]
-        remove_product_count = initial_product_count
-        with pytest.raises(KeyError):
-            cart_with_book_product.remove_product(book_product, remove_product_count)
-
-    def test_remove_product__more_than_exist_in_cart(self, book_product, cart_with_book_product):
-        initial_product_count = cart_with_book_product.products[book_product]
-        remove_product_count = random.randint(initial_product_count + 1, MAX_POSSIBLE_PRODUCT_QUANTITY)
-        with pytest.raises(KeyError):
-            cart_with_book_product.remove_product(book_product, remove_product_count)
-
-    @pytest.mark.parametrize('quantity', [0, -1, 1.7])
-    def test_remove_product__unacceptable_amount(self, book_product, cart_with_book_product, quantity):
-        with pytest.raises(ValueError):
-            cart_with_book_product.remove_product(book_product, quantity)
-
-#=============================================
-# tests for removing from cart without product
-
-    @pytest.mark.parametrize('quantity', [1, 10, 0, -1, 2.5])
-    def test_remove_product__product_not_in_cart__pass_amount(self, book_product, cart_without_book_product, quantity):
-        with pytest.raises(ValueError):
-            cart_without_book_product.remove_product(book_product, quantity)
-
-    def test_remove_product__product_not_in_cart__no_pass_amount(self, book_product, cart_without_book_product):
-        with pytest.raises(ValueError):
-            cart_without_book_product.remove_product(book_product)
+            cart_with_one_product.remove_product(product=test_product, remove_count=15)
 
 #=============================================
 # tests for clearing cart
 
-    def test_clear(self, random_cart):
-        assert random_cart.clear() == {}
+    @pytest.mark.parametrize('cart', ['empty_cart', 'cart_with_one_product'])
+    def test_clear(self, cart, request):
+        assert request.getfixturevalue(cart).clear() == {}
 
 #==============================
 # tests for getting total price
 
-    def test_get_total_price__not_empty_cart(self, generate_carts):
-        for cart in generate_carts:
-            expected_result = round(sum(product.price * cart.products[product] for product in cart.products), 2)
-            assert cart.get_total_price() == expected_result
+    def test_get_total_price__not_empty_cart(self, cart_with_some_products):
+        assert cart_with_some_products.get_total_price() == 2861.10
 
     def test_get_total_price__empty_cart(self, empty_cart):
             assert empty_cart.get_total_price() == 0
@@ -127,12 +133,11 @@ class TestCart:
 #======================================
 # tests for purchasing products in cart
 
-    def test_cart_buy_available_amount(self, cart_with_book_product):
-        assert cart_with_book_product.buy() == 'Success'
+    def test_cart_buy_available_amount(self, cart_with_available_product_amount):
+        cart_with_available_product_amount.buy()
+        assert cart_with_available_product_amount.products == {}
 
-    def test_cart_buy_max_available_amount(self, cart_with_products_count_max):
-        assert cart_with_products_count_max.buy() == 'Success'
-
-    def test_cart_buy_unavailable_amount(self, cart_with_products_count_over_max):
-        with pytest.raises(ValueError):
-            cart_with_products_count_over_max.buy()
+    def test_cart_buy_unavailable_amount(self, cart_with_unavailable_product_amount):
+        result = cart_with_unavailable_product_amount.buy()
+        assert 'pen' in result
+        assert len(cart_with_unavailable_product_amount.products) == 2
