@@ -128,7 +128,7 @@ class TestCart:
         assert cart_with_some_products.get_total_price() == 2861.10
 
     def test_get_total_price__empty_cart(self, empty_cart):
-            assert empty_cart.get_total_price() == 0
+        assert empty_cart.get_total_price() == 0
 
 #======================================
 # tests for purchasing products in cart
